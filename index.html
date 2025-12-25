@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Lane County GIS Pro | Property Intelligence</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Leaflet CSS -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+
+  <!-- App Styles -->
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- SVG Icon Sprite (for all icons, no external icon libs) -->
+  <svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
+    <symbol id="ic-logo" viewBox="0 0 24 24">
+      <path d="M4 6.5L10 4l4 2.5 6-2.5v14L14 18l-4-2.5L4 18V6.5z" fill="currentColor" />
+      <path d="M10 6v9M14 7v9" stroke="#020617" stroke-width="1.4" stroke-linecap="round" />
+    </symbol>
+
+    <symbol id="ic-search" viewBox="0 0 24 24">
+      <circle cx="11" cy="11" r="5.5" stroke="currentColor" stroke-width="1.6" fill="none" />
+      <path d="M15.5 15.5L19 19" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+    </symbol>
+
+    <symbol id="ic-bookmark" viewBox="0 0 24 24">
+      <path d="M7 4h10a1 1 0 0 1 1 1v15l-6-3.5L6 20V5a1 1 0 0 1 1-1z"
+            fill="currentColor" />
+    </symbol>
+
+    <symbol id="ic-close" viewBox="0 0 24 24">
+      <path d="M6 6l12 12M18 6L6 18"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round" />
+    </symbol>
+
+    <symbol id="ic-map" viewBox="0 0 24 24">
+      <path d="M3 6.5l6-3 6 3 6-3v14l-6 3-6-3-6 3v-14z"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6" />
+      <path d="M9 4v14M15 7v14" stroke="currentColor" stroke-width="1.4" />
+    </symbol>
+
+    <symbol id="ic-location" viewBox="0 0 24 24">
+      <path d="M12 4a5 5 0 0 1 5 5c0 3-5 9-5 9s-5-6-5-9a5 5 0 0 1 5-5z"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6" />
+      <circle cx="12" cy="9" r="1.8" fill="currentColor" />
+    </symbol>
+
+    <symbol id="ic-zoom-in" viewBox="0 0 24 24">
+      <circle cx="11" cy="11" r="5" fill="none" stroke="currentColor" stroke-width="1.6" />
+      <path d="M11 8v6M8 11h6"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round" />
+      <path d="M15.5 15.5L19 19"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round" />
+    </symbol>
+
+    <symbol id="ic-zoom-out" viewBox="0 0 24 24">
+      <circle cx="11" cy="11" r="5" fill="none" stroke="currentColor" stroke-width="1.6" />
+      <path d="M8 11h6"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round" />
+      <path d="M15.5 15.5L19 19"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round" />
+    </symbol>
+
+    <symbol id="ic-trash" viewBox="0 0 24 24">
+      <path d="M9 5h6l-.7-1.5A1 1 0 0 0 13.4 3h-2.8a1 1 0 0 0-.9.5L9 5z"
+            fill="currentColor" />
+      <path d="M5 6h14M9 10v7M15 10v7M7 6v13h10V6"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round" />
+    </symbol>
+
+    <symbol id="ic-download" viewBox="0 0 24 24">
+      <path d="M12 4v10M8 10l4 4 4-4"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round" />
+      <path d="M5 18h14"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round" />
+    </symbol>
+
+    <symbol id="ic-external" viewBox="0 0 24 24">
+      <path d="M9 9h6v6"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+            stroke-linejoin="round" />
+      <path d="M9 15L15 9"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round" />
+      <path d="M5 10v7h9"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round" />
+    </symbol>
+  </svg>
+
+  <!-- Fullscreen Loading Overlay -->
+  <div id="loadingOverlay" class="loading-overlay">
+    <div class="loader"></div>
+    <p class="loading-text">Initializing Lane County GIS Pro…</p>
+  </div>
+
+  <!-- Map -->
+  <div id="map"></div>
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="logo">
+        <div class="logo-icon">
+          <svg class="icon"><use href="#ic-logo"></use></svg>
+        </div>
+        <div class="logo-text">
+          <div class="logo-title">Lane County GIS Pro</div>
+          <div class="logo-subtitle">Property Intelligence</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="header-center">
+      <div class="search-wrapper">
+        <span class="search-icon">
+          <svg class="icon"><use href="#ic-search"></use></svg>
+        </span>
+        <input
+          id="globalSearchInput"
+          class="search-input"
+          placeholder="Search address in Lane County…"
+          autocomplete="off"
+        />
+        <button id="globalSearchClear" class="search-clear" aria-label="Clear search">
+          <svg class="icon"><use href="#ic-close"></use></svg>
+        </button>
+        <div id="globalSearchResults" class="search-results"></div>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <button id="savedBtn" class="icon-button" aria-label="Open saved properties">
+        <svg class="icon"><use href="#ic-bookmark"></use></svg>
+        <span id="savedBadge" class="badge">0</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Basemap Toggle -->
+  <div class="view-toggle">
+    <button class="view-btn active" data-view="street">
+      <svg class="icon"><use href="#ic-map"></use></svg>
+      <span>Street</span>
+    </button>
+    <button class="view-btn" data-view="satellite">
+      <svg class="icon"><use href="#ic-map"></use></svg>
+      <span>Satellite</span>
+    </button>
+    <button class="view-btn" data-view="dark">
+      <svg class="icon"><use href="#ic-map"></use></svg>
+      <span>Dark</span>
+    </button>
+  </div>
+
+  <!-- GPS & Zoom Controls -->
+  <div class="map-controls">
+    <button id="gpsBtn" class="gps-button" aria-label="Locate me">
+      <svg class="icon"><use href="#ic-location"></use></svg>
+    </button>
+    <div id="gpsStatus" class="gps-status">Locating…</div>
+
+    <div class="zoom-controls">
+      <button id="zoomIn" class="zoom-btn" aria-label="Zoom in">
+        <svg class="icon"><use href="#ic-zoom-in"></use></svg>
+      </button>
+      <button id="zoomOut" class="zoom-btn" aria-label="Zoom out">
+        <svg class="icon"><use href="#ic-zoom-out"></use></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Property Detail Panel (bottom sheet) -->
+  <section id="propertyPanel" class="property-panel">
+    <div class="panel-handle"></div>
+    <div class="panel-header">
+      <div class="panel-header-main">
+        <div>
+          <div id="propertyOwner" class="property-owner">Tap a parcel to view details</div>
+          <div id="propertyAddress" class="property-address"></div>
+        </div>
+        <div class="panel-header-actions">
+          <button
+            id="savePropertyIcon"
+            class="icon-button primary"
+            aria-label="Save this property"
+          >
+            <svg class="icon"><use href="#ic-bookmark"></use></svg>
+          </button>
+          <button
+            id="panelClose"
+            class="icon-button subtle"
+            aria-label="Close property panel"
+          >
+            <svg class="icon"><use href="#ic-close"></use></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-body">
+      <div class="property-stat-grid">
+        <div class="stat-card">
+          <div class="stat-label">Assessed Value</div>
+          <div id="statAssessed" class="stat-value">$0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Lot Size</div>
+          <div id="statLotSize" class="stat-value">N/A</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Zoning</div>
+          <div id="statZoning" class="stat-value small">N/A</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Year Built</div>
+          <div id="statYearBuilt" class="stat-value">N/A</div>
+        </div>
+      </div>
+
+      <div class="detail-section">
+        <div class="detail-row">
+          <span class="detail-label">
+            <svg class="icon sm"><use href="#ic-map"></use></svg>
+            Parcel ID
+          </span>
+          <span id="detailParcelId" class="detail-value">N/A</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">
+            <svg class="icon sm"><use href="#ic-map"></use></svg>
+            Tax Lot
+          </span>
+          <span id="detailTaxLot" class="detail-value">N/A</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">
+            <svg class="icon sm"><use href="#ic-map"></use></svg>
+            Property Type
+          </span>
+          <span id="detailPropType" class="detail-value">N/A</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">
+            <svg class="icon sm"><use href="#ic-map"></use></svg>
+            Land Value
+          </span>
+          <span id="detailLandValue" class="detail-value">$0</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">
+            <svg class="icon sm"><use href="#ic-map"></use></svg>
+            Improvement Value
+          </span>
+          <span id="detailImprovementValue" class="detail-value">$0</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">
+            <svg class="icon sm"><use href="#ic-map"></use></svg>
+            Township / Range / Section
+          </span>
+          <span id="detailTRS" class="detail-value">N/A</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-footer">
+      <button id="viewOnRLID" class="btn secondary">
+        <svg class="icon sm"><use href="#ic-external"></use></svg>
+        View in RLID
+      </button>
+      <button id="savePropertyButton" class="btn primary">
+        <svg class="icon sm"><use href="#ic-bookmark"></use></svg>
+        Save to List
+      </button>
+    </div>
+  </section>
+
+  <!-- Saved Properties Drawer -->
+  <aside id="savedDrawer" class="saved-drawer">
+    <header class="saved-header">
+      <div class="saved-header-left">
+        <button id="savedClose" class="icon-button subtle" aria-label="Close saved panel">
+          <svg class="icon"><use href="#ic-close"></use></svg>
+        </button>
+        <div>
+          <div class="saved-title">Saved Properties</div>
+          <div id="savedSubtitle" class="saved-subtitle">0 properties</div>
+        </div>
+      </div>
+    </header>
+
+    <div class="saved-toolbar">
+      <div class="saved-search-wrapper">
+        <span class="saved-search-icon">
+          <svg class="icon sm"><use href="#ic-search"></use></svg>
+        </span>
+        <input
+          id="savedSearchInput"
+          class="saved-search-input"
+          placeholder="Search by owner, address, or parcel ID"
+          autocomplete="off"
+        />
+        <button
+          id="savedSearchClear"
+          class="saved-search-clear"
+          aria-label="Clear saved search"
+        >
+          <svg class="icon sm"><use href="#ic-close"></use></svg>
+        </button>
+      </div>
+
+      <label class="saved-select-all">
+        <input id="selectAllCheckbox" type="checkbox" />
+        <span class="custom-checkbox-mark"></span>
+        <span>Select all</span>
+      </label>
+    </div>
+
+    <div id="savedList" class="saved-list"></div>
+
+    <footer class="saved-footer">
+      <div id="selectedSummary" class="selected-summary">No properties selected</div>
+      <div class="saved-footer-actions">
+        <button id="deleteSelected" class="btn subtle" disabled>
+          <svg class="icon sm"><use href="#ic-trash"></use></svg>
+          Delete
+        </button>
+        <button id="exportSelected" class="btn primary" disabled>
+          <svg class="icon sm"><use href="#ic-download"></use></svg>
+          Export TXT
+        </button>
+      </div>
+    </footer>
+  </aside>
+
+  <!-- Screen Overlay (for saved drawer & modal) -->
+  <div id="overlay" class="overlay"></div>
+
+  <!-- Confirmation Modal for deletions (custom popup) -->
+  <div id="confirmModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-header">
+        <div id="confirmTitle" class="modal-title">Confirm action</div>
+        <button id="confirmClose" class="icon-button subtle" aria-label="Close dialog">
+          <svg class="icon sm"><use href="#ic-close"></use></svg>
+        </button>
+      </div>
+      <div id="confirmMessage" class="modal-body">
+        Are you sure you want to perform this action?
+      </div>
+      <div class="modal-footer">
+        <button id="confirmCancel" class="btn subtle">Cancel</button>
+        <button id="confirmOk" class="btn primary">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- App Logic -->
+  <script type="module" src="script.js"></script>
+</body>
+</html>

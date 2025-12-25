@@ -1,20 +1,15 @@
 // script.js
 // Lane County GIS Pro - Front-end only (GitHub Pages safe)
-// Uses a public CORS proxy (AllOrigins) + Lane County ArcGIS services
-// + geocoder fallbacks, with robust error handling and N/A behavior.
+// Uses AllOrigins as a CORS proxy + Lane County ArcGIS taxlots,
+// with strong error handling, fallbacks, and professional UI wiring.
 
 // =======================================================
 // CONFIG
 // =======================================================
 
 // 1) CORS PROXY (AllOrigins)
-// -------------------------------------------------------
-// AllOrigins docs: https://api.allorigins.win
-// Usage: GET https://api.allorigins.win/raw?url=<encoded_target_url>
-//
-// For example to query Lane County:
-//   https://api.allorigins.win/raw?url=https%3A%2F%2Fgis.lanecounty.org%2F...
-//
+// Docs: https://api.allorigins.win
+// This endpoint returns the target URL contents with CORS headers.
 const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
 
 // 2) Lane County taxlots (ArcGIS MapServer layer 0)
@@ -22,7 +17,6 @@ const LANE_TAXLOTS_URL =
   'https://gis.lanecounty.org/arcgis/rest/services/LaneCounty/Taxlots/MapServer/0';
 
 // 3) City of Eugene taxlots (optional fallback)
-// If you find the official Eugene taxlot URL, plug it in here.
 const EUGENE_TAXLOTS_URL =
   ''; // e.g. 'https://maps.eugene-or.gov/arcgis/rest/services/Public/Taxlots/MapServer/0'
 
@@ -35,7 +29,7 @@ const TAXLOT_ENDPOINTS = [
   LANE_TAXLOTS_URL,
   EUGENE_TAXLOTS_URL,
   STATEWIDE_TAXLOTS_URL
-].filter(Boolean); // removes empty strings
+].filter(Boolean);
 
 // 5) Geocoders
 // Primary: Esri World Geocoder
@@ -105,15 +99,20 @@ const AppState = {
 // =======================================================
 
 document.addEventListener('DOMContentLoaded', () => {
-  initMap();
-  initBaseLayers();
-  initUIEvents();
-  initSaved();
-  initGlobalSearch();
-
-  setTimeout(() => {
-    document.getElementById('loadingOverlay').classList.add('hidden');
-  }, 900);
+  try {
+    initMap();
+    initBaseLayers();
+    initUIEvents();
+    initSaved();
+    initGlobalSearch();
+  } catch (err) {
+    console.error('Initialization error:', err);
+    showToast('Error initializing app. Check console.', 'error');
+  } finally {
+    setTimeout(() => {
+      document.getElementById('loadingOverlay').classList.add('hidden');
+    }, 900);
+  }
 });
 
 // =======================================================
@@ -196,13 +195,11 @@ function initUIEvents() {
   // Saved search
   const savedSearchInput = document.getElementById('savedSearchInput');
   const savedSearchClear = document.getElementById('savedSearchClear');
-
   savedSearchInput.addEventListener('input', () => {
     const q = savedSearchInput.value.trim();
     savedSearchClear.classList.toggle('visible', q.length > 0);
     filterSaved(q);
   });
-
   savedSearchClear.addEventListener('click', () => {
     savedSearchInput.value = '';
     savedSearchClear.classList.remove('visible');
@@ -472,7 +469,7 @@ async function tryIdentifyFromTaxlots(lat, lng) {
     const url = `${endpoint}/query?${params.toString()}`;
     try {
       console.log('Querying taxlots endpoint:', url);
-      const res = await fetchWithTimeout(url, {}, 8000);
+      const res = await fetchWithTimeout(url, {}, 10000);
       if (!res.ok) {
         errors.push(`${endpoint}: HTTP ${res.status}`);
         continue;
@@ -713,7 +710,6 @@ function initGlobalSearch() {
   });
 }
 
-// (searchAddresses defined above – repeated here so it's in one place)
 async function searchAddresses(query) {
   const bbox = `${LANE_BOUNDS.getWest()},${LANE_BOUNDS.getSouth()},${LANE_BOUNDS.getEast()},${LANE_BOUNDS.getNorth()}`;
   const params = new URLSearchParams({
@@ -813,9 +809,474 @@ function renderSearchResults(candidates) {
   resultsEl.classList.add('visible');
 }
 
+function flyToAndIdentify(lat, lng) {
+  const center = L.latLng(lat, lng);
+  AppState.map.flyTo(center, 18, { duration: 1.5 });
+  setTimeout(() => identifyParcelAt(lat, lng), 1500);
+}
+
 // =======================================================
-// SAVED PROPERTIES, RLID, MODAL, UTILITIES
+// SAVED PROPERTIES
 // =======================================================
-// (Same as before; if you want me to paste them again, I can.)
-// For brevity, the rest of the code is unchanged from your last working version,
-// and this CORS change is the key difference.
+
+function initSaved() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    AppState.saved = raw ? JSON.parse(raw) : [];
+  } catch {
+    AppState.saved = [];
+  }
+  AppState.filteredSaved = [...AppState.saved];
+  updateSavedBadges();
+  renderSavedList();
+}
+
+function updateSavedBadges() {
+  const count = AppState.saved.length;
+  document.getElementById('savedBadge').textContent = count;
+  document.getElementById('savedSubtitle').textContent =
+    count === 1 ? '1 property' : `${count} properties`;
+}
+
+function isCurrentSaved() {
+  if (!AppState.currentProperty) return false;
+  const key = AppState.currentProperty.uniqueKey;
+  return AppState.saved.some(p => p.uniqueKey === key);
+}
+
+function updateSaveButtons() {
+  const footerBtn = document.getElementById('savePropertyButton');
+  const saved = isCurrentSaved();
+
+  if (saved) {
+    footerBtn.innerHTML = '<svg class="icon sm"><use href="#ic-bookmark"></use></svg> Saved';
+    footerBtn.disabled = true;
+  } else {
+    footerBtn.innerHTML =
+      '<svg class="icon sm"><use href="#ic-bookmark"></use></svg> Save to List';
+    footerBtn.disabled = false;
+  }
+}
+
+function saveCurrentProperty() {
+  if (!AppState.currentProperty) {
+    showToast('No property selected', 'error');
+    return;
+  }
+  if (isCurrentSaved()) {
+    showToast('Property already in your list', 'error');
+    return;
+  }
+
+  const p = AppState.currentProperty;
+  const savedItem = {
+    ...p,
+    id: Date.now(),
+    savedAt: new Date().toISOString()
+  };
+
+  AppState.saved.push(savedItem);
+  AppState.filteredSaved = [...AppState.saved];
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(AppState.saved));
+
+  updateSavedBadges();
+  renderSavedList();
+  updateSaveButtons();
+  showToast('Property saved', 'success');
+}
+
+function openSavedDrawer() {
+  document.getElementById('savedDrawer').classList.add('open');
+  document.getElementById('overlay').classList.add('visible');
+  AppState.selectedSavedIds.clear();
+  filterSaved(document.getElementById('savedSearchInput').value.trim());
+}
+
+function closeSavedDrawer() {
+  document.getElementById('savedDrawer').classList.remove('open');
+  document.getElementById('overlay').classList.remove('visible');
+}
+
+function filterSaved(query) {
+  const q = query.toLowerCase();
+  if (!q) {
+    AppState.filteredSaved = [...AppState.saved];
+  } else {
+    AppState.filteredSaved = AppState.saved.filter(p =>
+      (p.owner || '').toLowerCase().includes(q) ||
+      (p.situs || '').toLowerCase().includes(q) ||
+      (p.parcelId || '').toLowerCase().includes(q)
+    );
+  }
+  renderSavedList();
+  updateSelectionSummary();
+}
+
+function renderSavedList() {
+  const list = document.getElementById('savedList');
+  list.innerHTML = '';
+
+  if (!AppState.filteredSaved.length) {
+    list.innerHTML = `
+      <div class="saved-empty">
+        <div class="saved-empty-icon">
+          <svg class="icon"><use href="#ic-bookmark"></use></svg>
+        </div>
+        <div>No saved properties match your search.</div>
+      </div>`;
+    const cb = document.getElementById('selectAllCheckbox');
+    cb.checked = false;
+    cb.indeterminate = false;
+    return;
+  }
+
+  AppState.filteredSaved.forEach((p, index) => {
+    const isSelected = AppState.selectedSavedIds.has(p.id);
+    const card = document.createElement('div');
+    card.className = 'saved-card' + (isSelected ? ' selected' : '');
+    card.dataset.id = p.id;
+
+    const savedDate = p.savedAt ? new Date(p.savedAt) : null;
+    const dateLabel = savedDate
+      ? savedDate.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric'
+        })
+      : '';
+
+    card.innerHTML = `
+      <div class="saved-card-top">
+        <div class="card-left">
+          <div class="card-checkbox ${isSelected ? 'checked' : ''}"></div>
+          <div class="card-index">#${index + 1}</div>
+        </div>
+        <div class="card-tag">${p.zoning || 'Zoning N/A'}</div>
+      </div>
+      <div class="saved-card-main">
+        <div class="saved-owner">${p.owner}</div>
+        <div class="saved-address">${p.fullAddress || p.situs}</div>
+        <div class="saved-card-stats">
+          <div class="saved-stat">
+            <span class="saved-stat-label">Value</span>
+            <span class="saved-stat-value">${p.assessed != null ? formatCurrency(p.assessed) : 'N/A'}</span>
+          </div>
+          <div class="saved-stat">
+            <span class="saved-stat-label">Lot</span>
+            <span class="saved-stat-value">${p.lotSizeLabel || 'N/A'}</span>
+          </div>
+          <div class="saved-stat">
+            <span class="saved-stat-label">Parcel</span>
+            <span class="saved-stat-value">${p.parcelId || 'N/A'}</span>
+          </div>
+        </div>
+      </div>
+      <div class="saved-card-footer">
+        <div class="saved-date">${dateLabel ? 'Saved ' + dateLabel : ''}</div>
+        <div class="saved-actions">
+          <button class="saved-mini-btn" title="Zoom to on map">
+            <svg class="icon sm"><use href="#ic-location"></use></svg>
+          </button>
+          <button class="saved-mini-btn" title="Remove from list">
+            <svg class="icon sm"><use href="#ic-trash"></use></svg>
+          </button>
+        </div>
+      </div>
+    `;
+
+    // Selection checkbox
+    card.querySelector('.card-checkbox').addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleSavedSelection(p.id);
+    });
+
+    // Zoom to property
+    card.querySelectorAll('.saved-mini-btn')[0].addEventListener('click', async (e) => {
+      e.stopPropagation();
+      closeSavedDrawer();
+
+      const query = p.fullAddress || p.situs;
+      if (!query || query === 'N/A') {
+        showToast('No address available to locate this property', 'error');
+        return;
+      }
+
+      showToast('Locating property on map…', 'success');
+
+      try {
+        const candidates = await searchAddresses(query);
+        if (!candidates.length) {
+          showToast('Could not locate this address on the map', 'error');
+          return;
+        }
+
+        const best = candidates[0];
+        flyToAndIdentify(best.location.lat, best.location.lng);
+      } catch (err) {
+        console.error(err);
+        showToast('Network error while locating property', 'error');
+      }
+    });
+
+    // Delete single
+    card.querySelectorAll('.saved-mini-btn')[1].addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const confirmed = await showConfirmModal({
+        title: 'Remove property',
+        message: `Remove "${p.owner}" at "${p.situs}" from your saved list?`,
+        confirmText: 'Remove',
+        confirmStyle: 'danger'
+      });
+      if (confirmed) {
+        deleteSingleSaved(p.id);
+      }
+    });
+
+    list.appendChild(card);
+  });
+
+  updateSelectAllCheckbox();
+  updateSelectionSummary();
+}
+
+function toggleSavedSelection(id) {
+  if (AppState.selectedSavedIds.has(id)) {
+    AppState.selectedSavedIds.delete(id);
+  } else {
+    AppState.selectedSavedIds.add(id);
+  }
+  renderSavedList();
+}
+
+function handleSelectAll(checked) {
+  AppState.selectedSavedIds.clear();
+  if (checked) {
+    AppState.filteredSaved.forEach(p => AppState.selectedSavedIds.add(p.id));
+  }
+  renderSavedList();
+}
+
+function updateSelectAllCheckbox() {
+  const cb = document.getElementById('selectAllCheckbox');
+  const visibleIds = AppState.filteredSaved.map(p => p.id);
+  const selectedVisible = visibleIds.filter(id => AppState.selectedSavedIds.has(id));
+
+  if (!visibleIds.length) {
+    cb.checked = false;
+    cb.indeterminate = false;
+    return;
+  }
+
+  if (!selectedVisible.length) {
+    cb.checked = false;
+    cb.indeterminate = false;
+  } else if (selectedVisible.length === visibleIds.length) {
+    cb.checked = true;
+    cb.indeterminate = false;
+  } else {
+    cb.checked = false;
+    cb.indeterminate = true;
+  }
+}
+
+function updateSelectionSummary() {
+  const selectedCount = AppState.selectedSavedIds.size;
+  const totalVisible = AppState.filteredSaved.length;
+  const summary = document.getElementById('selectedSummary');
+  const delBtn = document.getElementById('deleteSelected');
+  const expBtn = document.getElementById('exportSelected');
+
+  if (!totalVisible) {
+    summary.textContent = 'No saved properties to show';
+    delBtn.disabled = true;
+    expBtn.disabled = true;
+    return;
+  }
+
+  if (!selectedCount) {
+    summary.textContent = `${totalVisible} in view. No selection.`;
+    delBtn.disabled = true;
+    expBtn.disabled = true;
+  } else if (selectedCount === totalVisible) {
+    summary.textContent = `All ${selectedCount} visible properties selected`;
+    delBtn.disabled = false;
+    expBtn.disabled = false;
+  } else {
+    summary.textContent = `${selectedCount} of ${totalVisible} visible selected`;
+    delBtn.disabled = false;
+    expBtn.disabled = false;
+  }
+}
+
+function deleteSingleSaved(id) {
+  AppState.saved = AppState.saved.filter(p => p.id !== id);
+  AppState.selectedSavedIds.delete(id);
+  AppState.filteredSaved = AppState.filteredSaved.filter(p => p.id !== id);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(AppState.saved));
+  updateSavedBadges();
+  renderSavedList();
+  showToast('Property removed', 'success');
+}
+
+async function deleteSelectedSaved() {
+  const ids = Array.from(AppState.selectedSavedIds);
+  if (!ids.length) return;
+
+  const confirmed = await showConfirmModal({
+    title: 'Remove selected',
+    message: `Remove ${ids.length} propert${ids.length === 1 ? 'y' : 'ies'} from your saved list?`,
+    confirmText: 'Remove',
+    confirmStyle: 'danger'
+  });
+  if (!confirmed) return;
+
+  AppState.saved = AppState.saved.filter(p => !AppState.selectedSavedIds.has(p.id));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(AppState.saved));
+
+  AppState.filteredSaved = [...AppState.saved];
+  AppState.selectedSavedIds.clear();
+  updateSavedBadges();
+  renderSavedList();
+  showToast('Selected properties removed', 'success');
+}
+
+function exportSelectedSaved() {
+  const ids = Array.from(AppState.selectedSavedIds);
+  if (!ids.length) return;
+
+  const props = AppState.saved.filter(p => ids.includes(p.id));
+  if (!props.length) return;
+
+  const lines = [];
+  lines.push('LANE COUNTY PROPERTY REPORT');
+  lines.push('========================================');
+  lines.push(`Generated: ${new Date().toLocaleString()}`);
+  lines.push(`Total properties: ${props.length}`);
+  lines.push('');
+
+  props.forEach((p, i) => {
+    lines.push(`Property ${i + 1}`);
+    lines.push('----------------------------------------');
+    lines.push(`Owner:          ${p.owner}`);
+    lines.push(`Site Address:   ${p.situs}`);
+    lines.push(`Parcel ID:      ${p.parcelId || 'N/A'}`);
+    lines.push(`Tax Lot:        ${p.taxLot || 'N/A'}`);
+    lines.push(`Zoning:         ${p.zoning || 'N/A'}`);
+    lines.push(`Assessed Value: ${p.assessed != null ? formatCurrency(p.assessed) : 'N/A'}`);
+    lines.push(`Land Value:     ${p.land != null ? formatCurrency(p.land) : 'N/A'}`);
+    lines.push(`Impr. Value:    ${p.improv != null ? formatCurrency(p.improv) : 'N/A'}`);
+    lines.push(`Lot Size:       ${p.lotSizeLabel || 'N/A'}`);
+    lines.push(`Year Built:     ${p.yearBuilt || 'N/A'}`);
+    lines.push(`Saved On:       ${p.savedAt ? new Date(p.savedAt).toLocaleString() : 'N/A'}`);
+    lines.push('');
+  });
+
+  lines.push('========================================');
+  lines.push('Source: Lane County GIS / RLID');
+  lines.push('Note: Values are approximate and for reference only.');
+  lines.push('========================================');
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const now = new Date();
+  const name = `lane_county_properties_${now.getFullYear()}${String(
+    now.getMonth() + 1
+  ).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}.txt`;
+
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  showToast(`Exported ${props.length} propert${props.length === 1 ? 'y' : 'ies'}`, 'success');
+}
+
+// =======================================================
+// RLID
+// =======================================================
+
+function openRLID() {
+  if (!AppState.currentProperty) {
+    window.open('https://www.rlid.org', '_blank');
+    return;
+  }
+  const pid = AppState.currentProperty.parcelId;
+  if (!pid || pid === 'N/A') {
+    window.open('https://www.rlid.org', '_blank');
+    return;
+  }
+  window.open(
+    `https://www.rlid.org/custom/lc/at/query_results.cfm?maptaxlot=${encodeURIComponent(pid)}`,
+    '_blank'
+  );
+}
+
+// =======================================================
+// CONFIRM MODAL + UTILITIES
+// =======================================================
+
+let confirmResolve = null;
+
+function initConfirmModal() {
+  const modal = document.getElementById('confirmModal');
+  const btnOk = document.getElementById('confirmOk');
+  const btnCancel = document.getElementById('confirmCancel');
+  const btnClose = document.getElementById('confirmClose');
+
+  const close = (result) => {
+    modal.classList.remove('visible');
+    if (confirmResolve) {
+      confirmResolve(result);
+      confirmResolve = null;
+    }
+  };
+
+  btnOk.addEventListener('click', () => close(true));
+  btnCancel.addEventListener('click', () => close(false));
+  btnClose.addEventListener('click', () => close(false));
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) close(false);
+  });
+}
+
+function showConfirmModal({ title, message, confirmText = 'OK', confirmStyle = 'primary' }) {
+  const modal = document.getElementById('confirmModal');
+  document.getElementById('confirmTitle').textContent = title;
+  document.getElementById('confirmMessage').textContent = message;
+  const btnOk = document.getElementById('confirmOk');
+
+  btnOk.textContent = confirmText;
+  btnOk.classList.remove('primary', 'danger');
+  btnOk.classList.add('primary');
+
+  modal.classList.add('visible');
+
+  return new Promise((resolve) => {
+    confirmResolve = resolve;
+  });
+}
+
+function formatCurrency(v) {
+  const n = Number(v);
+  if (Number.isNaN(n)) return 'N/A';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0
+  }).format(n);
+}
+
+function showToast(message, type = 'success') {
+  const container = document.getElementById('toastContainer');
+  const div = document.createElement('div');
+  div.className = `toast ${type}`;
+  div.innerHTML = `
+    <span class="toast-icon"></span>
+    <span>${message}</span>
+  `;
+  container.appendChild(div);
+  setTimeout(() => div.remove(), 2600);
+}

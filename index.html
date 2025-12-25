@@ -1,397 +1,431 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Lane County GIS Pro | Property Intelligence</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-  <!-- Leaflet CSS -->
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-  />
-
-  <!-- App Styles -->
-  <link rel="stylesheet" href="styles.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Lane County GIS Property Explorer - Interactive property lookup and management tool">
+    <title>Lane County GIS Property Explorer</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" 
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" 
+          crossorigin="anonymous">
+    
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" 
+          integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" 
+          crossorigin="anonymous">
+    
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <!-- SVG Icon Sprite (for all icons, no external icon libs) -->
-  <svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
-    <symbol id="ic-logo" viewBox="0 0 24 24">
-      <path d="M4 6.5L10 4l4 2.5 6-2.5v14L14 18l-4-2.5L4 18V6.5z" fill="currentColor" />
-      <path d="M10 6v9M14 7v9" stroke="#020617" stroke-width="1.4" stroke-linecap="round" />
-    </symbol>
-
-    <symbol id="ic-search" viewBox="0 0 24 24">
-      <circle cx="11" cy="11" r="5.5" stroke="currentColor" stroke-width="1.6" fill="none" />
-      <path d="M15.5 15.5L19 19" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
-    </symbol>
-
-    <symbol id="ic-bookmark" viewBox="0 0 24 24">
-      <path d="M7 4h10a1 1 0 0 1 1 1v15l-6-3.5L6 20V5a1 1 0 0 1 1-1z"
-            fill="currentColor" />
-    </symbol>
-
-    <symbol id="ic-close" viewBox="0 0 24 24">
-      <path d="M6 6l12 12M18 6L6 18"
-            stroke="currentColor"
-            stroke-width="1.8"
-            stroke-linecap="round" />
-    </symbol>
-
-    <symbol id="ic-map" viewBox="0 0 24 24">
-      <path d="M3 6.5l6-3 6 3 6-3v14l-6 3-6-3-6 3v-14z"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.6" />
-      <path d="M9 4v14M15 7v14" stroke="currentColor" stroke-width="1.4" />
-    </symbol>
-
-    <symbol id="ic-location" viewBox="0 0 24 24">
-      <path d="M12 4a5 5 0 0 1 5 5c0 3-5 9-5 9s-5-6-5-9a5 5 0 0 1 5-5z"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.6" />
-      <circle cx="12" cy="9" r="1.8" fill="currentColor" />
-    </symbol>
-
-    <symbol id="ic-zoom-in" viewBox="0 0 24 24">
-      <circle cx="11" cy="11" r="5" fill="none" stroke="currentColor" stroke-width="1.6" />
-      <path d="M11 8v6M8 11h6"
-            stroke="currentColor"
-            stroke-width="1.6"
-            stroke-linecap="round" />
-      <path d="M15.5 15.5L19 19"
-            stroke="currentColor"
-            stroke-width="1.6"
-            stroke-linecap="round" />
-    </symbol>
-
-    <symbol id="ic-zoom-out" viewBox="0 0 24 24">
-      <circle cx="11" cy="11" r="5" fill="none" stroke="currentColor" stroke-width="1.6" />
-      <path d="M8 11h6"
-            stroke="currentColor"
-            stroke-width="1.6"
-            stroke-linecap="round" />
-      <path d="M15.5 15.5L19 19"
-            stroke="currentColor"
-            stroke-width="1.6"
-            stroke-linecap="round" />
-    </symbol>
-
-    <symbol id="ic-trash" viewBox="0 0 24 24">
-      <path d="M9 5h6l-.7-1.5A1 1 0 0 0 13.4 3h-2.8a1 1 0 0 0-.9.5L9 5z"
-            fill="currentColor" />
-      <path d="M5 6h14M9 10v7M15 10v7M7 6v13h10V6"
-            stroke="currentColor"
-            stroke-width="1.6"
-            stroke-linecap="round" />
-    </symbol>
-
-    <symbol id="ic-download" viewBox="0 0 24 24">
-      <path d="M12 4v10M8 10l4 4 4-4"
-            stroke="currentColor"
-            stroke-width="1.8"
-            stroke-linecap="round"
-            stroke-linejoin="round" />
-      <path d="M5 18h14"
-            stroke="currentColor"
-            stroke-width="1.8"
-            stroke-linecap="round" />
-    </symbol>
-
-    <symbol id="ic-external" viewBox="0 0 24 24">
-      <path d="M9 9h6v6"
-            stroke="currentColor"
-            stroke-width="1.6"
-            stroke-linecap="round"
-            stroke-linejoin="round" />
-      <path d="M9 15L15 9"
-            stroke="currentColor"
-            stroke-width="1.6"
-            stroke-linecap="round" />
-      <path d="M5 10v7h9"
-            stroke="currentColor"
-            stroke-width="1.6"
-            stroke-linecap="round" />
-    </symbol>
-  </svg>
-
-  <!-- Fullscreen Loading Overlay -->
-  <div id="loadingOverlay" class="loading-overlay">
-    <div class="loader"></div>
-    <p class="loading-text">Initializing Lane County GIS Pro…</p>
-  </div>
-
-  <!-- Map -->
-  <div id="map"></div>
-
-  <!-- Header -->
-  <header class="app-header">
-    <div class="header-left">
-      <div class="logo">
-        <div class="logo-icon">
-          <svg class="icon"><use href="#ic-logo"></use></svg>
-        </div>
-        <div class="logo-text">
-          <div class="logo-title">Lane County GIS Pro</div>
-          <div class="logo-subtitle">Property Intelligence</div>
-        </div>
-      </div>
+    <!-- Main Application Container -->
+    <div id="app-container">
+        
+        <!-- Sidebar: Saved Properties Panel -->
+        <aside id="sidebar" class="sidebar">
+            <!-- Sidebar Header -->
+            <div class="sidebar-header">
+                <div class="sidebar-title">
+                    <i class="fas fa-bookmark"></i>
+                    <h2>Saved Properties</h2>
+                </div>
+                <button id="sidebar-toggle" class="sidebar-toggle" aria-label="Toggle Sidebar">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+            </div>
+            
+            <!-- Sidebar Actions -->
+            <div class="sidebar-actions">
+                <button id="btn-export-all" class="btn btn-primary" disabled>
+                    <i class="fas fa-download"></i>
+                    <span>Export All</span>
+                </button>
+                <button id="btn-export-selected" class="btn btn-secondary" disabled>
+                    <i class="fas fa-file-export"></i>
+                    <span>Export Selected</span>
+                </button>
+                <button id="btn-clear-all" class="btn btn-danger" disabled>
+                    <i class="fas fa-trash-alt"></i>
+                    <span>Clear All</span>
+                </button>
+            </div>
+            
+            <!-- Select All Checkbox -->
+            <div class="sidebar-select-all">
+                <label class="checkbox-container">
+                    <input type="checkbox" id="select-all-checkbox">
+                    <span class="checkmark"></span>
+                    <span class="label-text">Select All</span>
+                </label>
+                <span id="property-count" class="property-count">0 properties</span>
+            </div>
+            
+            <!-- Saved Properties List -->
+            <div id="saved-properties-list" class="saved-properties-list">
+                <!-- Empty State -->
+                <div id="empty-state" class="empty-state">
+                    <i class="fas fa-map-marked-alt"></i>
+                    <p>No properties saved yet</p>
+                    <span>Click on the map or search to find and save properties</span>
+                </div>
+                <!-- Property cards will be dynamically inserted here -->
+            </div>
+        </aside>
+        
+        <!-- Main Map Container -->
+        <main id="map-container">
+            <!-- The Leaflet Map -->
+            <div id="map"></div>
+            
+            <!-- Search Panel -->
+            <div id="search-panel" class="search-panel">
+                <!-- Search Type Tabs -->
+                <div class="search-tabs">
+                    <button class="search-tab active" data-search-type="address" title="Search by Address">
+                        <i class="fas fa-home"></i>
+                        <span>Address</span>
+                    </button>
+                    <button class="search-tab" data-search-type="taxlot" title="Search by Tax Lot">
+                        <i class="fas fa-hashtag"></i>
+                        <span>Tax Lot</span>
+                    </button>
+                    <button class="search-tab" data-search-type="owner" title="Search by Owner Name">
+                        <i class="fas fa-user"></i>
+                        <span>Owner</span>
+                    </button>
+                    <button class="search-tab" data-search-type="coordinates" title="Search by Coordinates">
+                        <i class="fas fa-crosshairs"></i>
+                        <span>Coords</span>
+                    </button>
+                </div>
+                
+                <!-- Search Input Area -->
+                <div class="search-input-wrapper">
+                    <!-- Address Search (Default) -->
+                    <div id="search-address" class="search-input-group active">
+                        <div class="search-input-container">
+                            <i class="fas fa-search search-icon"></i>
+                            <input 
+                                type="text" 
+                                id="input-address" 
+                                class="search-input" 
+                                placeholder="Enter street address (e.g., 123 Main St, Eugene)"
+                                autocomplete="off"
+                                spellcheck="false"
+                            >
+                            <button id="btn-clear-address" class="search-clear-btn hidden" title="Clear">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <button id="btn-search-address" class="btn btn-search">
+                            <i class="fas fa-search"></i>
+                            <span>Search</span>
+                        </button>
+                    </div>
+                    
+                    <!-- Tax Lot Search -->
+                    <div id="search-taxlot" class="search-input-group">
+                        <div class="search-input-container">
+                            <i class="fas fa-hashtag search-icon"></i>
+                            <input 
+                                type="text" 
+                                id="input-taxlot" 
+                                class="search-input" 
+                                placeholder="Enter tax lot ID (e.g., 1234567)"
+                                autocomplete="off"
+                                spellcheck="false"
+                            >
+                            <button id="btn-clear-taxlot" class="search-clear-btn hidden" title="Clear">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <button id="btn-search-taxlot" class="btn btn-search">
+                            <i class="fas fa-search"></i>
+                            <span>Search</span>
+                        </button>
+                    </div>
+                    
+                    <!-- Owner Search -->
+                    <div id="search-owner" class="search-input-group">
+                        <div class="search-input-container">
+                            <i class="fas fa-user search-icon"></i>
+                            <input 
+                                type="text" 
+                                id="input-owner" 
+                                class="search-input" 
+                                placeholder="Enter owner name (e.g., Smith, John)"
+                                autocomplete="off"
+                                spellcheck="false"
+                            >
+                            <button id="btn-clear-owner" class="search-clear-btn hidden" title="Clear">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <button id="btn-search-owner" class="btn btn-search">
+                            <i class="fas fa-search"></i>
+                            <span>Search</span>
+                        </button>
+                    </div>
+                    
+                    <!-- Coordinates Search -->
+                    <div id="search-coordinates" class="search-input-group">
+                        <div class="search-coords-inputs">
+                            <div class="search-input-container coord-input">
+                                <label for="input-lat">Lat</label>
+                                <input 
+                                    type="text" 
+                                    id="input-lat" 
+                                    class="search-input" 
+                                    placeholder="44.0521"
+                                    autocomplete="off"
+                                    spellcheck="false"
+                                >
+                            </div>
+                            <div class="search-input-container coord-input">
+                                <label for="input-lng">Lng</label>
+                                <input 
+                                    type="text" 
+                                    id="input-lng" 
+                                    class="search-input" 
+                                    placeholder="-123.0868"
+                                    autocomplete="off"
+                                    spellcheck="false"
+                                >
+                            </div>
+                        </div>
+                        <button id="btn-search-coords" class="btn btn-search">
+                            <i class="fas fa-search"></i>
+                            <span>Go</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Search Results Dropdown -->
+                <div id="search-results" class="search-results hidden">
+                    <div class="search-results-header">
+                        <span id="results-count">0 results found</span>
+                        <button id="btn-close-results" class="btn-close-results" title="Close">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <ul id="results-list" class="results-list">
+                        <!-- Search result items will be inserted here -->
+                    </ul>
+                    <div id="results-empty" class="results-empty hidden">
+                        <i class="fas fa-search"></i>
+                        <p>No results found</p>
+                        <span>Try adjusting your search terms</span>
+                    </div>
+                    <div id="results-loading" class="results-loading hidden">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <span>Searching...</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Map Controls Overlay -->
+            <div id="map-controls" class="map-controls">
+                <!-- Basemap Toggle -->
+                <div class="basemap-toggle">
+                    <button id="btn-street-view" class="basemap-btn active" title="Street View">
+                        <i class="fas fa-road"></i>
+                        <span>Street</span>
+                    </button>
+                    <button id="btn-satellite-view" class="basemap-btn" title="Satellite View">
+                        <i class="fas fa-satellite"></i>
+                        <span>Satellite</span>
+                    </button>
+                </div>
+                
+                <!-- My Location Button -->
+                <button id="btn-my-location" class="btn-map-action" title="Go to My Location">
+                    <i class="fas fa-location-arrow"></i>
+                </button>
+                
+                <!-- Reset View Button -->
+                <button id="btn-reset-view" class="btn-map-action" title="Reset Map View">
+                    <i class="fas fa-compress-arrows-alt"></i>
+                </button>
+            </div>
+            
+            <!-- Coordinates Display -->
+            <div id="coordinates-display" class="coordinates-display">
+                <i class="fas fa-crosshairs"></i>
+                <span id="coords-text">Click on map to identify property</span>
+            </div>
+            
+            <!-- Loading Overlay -->
+            <div id="loading-overlay" class="loading-overlay hidden">
+                <div class="loading-spinner">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <span>Fetching property data...</span>
+                </div>
+            </div>
+            
+            <!-- Error Toast -->
+            <div id="error-toast" class="toast toast-error hidden">
+                <i class="fas fa-exclamation-circle"></i>
+                <span id="error-message">An error occurred</span>
+                <button id="toast-close" class="toast-close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <!-- Success Toast -->
+            <div id="success-toast" class="toast toast-success hidden">
+                <i class="fas fa-check-circle"></i>
+                <span id="success-message">Property saved successfully</span>
+            </div>
+            
+            <!-- Sidebar Expand Button (when collapsed) -->
+            <button id="sidebar-expand-btn" class="sidebar-expand-btn" aria-label="Open Saved Properties">
+                <i class="fas fa-bookmark"></i>
+                <span id="saved-badge" class="saved-badge hidden">0</span>
+            </button>
+        </main>
     </div>
-
-    <div class="header-center">
-      <div class="search-wrapper">
-        <span class="search-icon">
-          <svg class="icon"><use href="#ic-search"></use></svg>
-        </span>
-        <input
-          id="globalSearchInput"
-          class="search-input"
-          placeholder="Search address in Lane County…"
-          autocomplete="off"
-        />
-        <button id="globalSearchClear" class="search-clear" aria-label="Clear search">
-          <svg class="icon"><use href="#ic-close"></use></svg>
-        </button>
-        <div id="globalSearchResults" class="search-results"></div>
-      </div>
+    
+    <!-- Property Popup Template (Hidden - Used by JavaScript) -->
+    <template id="popup-template">
+        <div class="property-popup">
+            <div class="popup-header">
+                <h3 class="popup-title">
+                    <i class="fas fa-home"></i>
+                    <span class="property-address">Loading...</span>
+                </h3>
+            </div>
+            <div class="popup-content">
+                <div class="popup-row">
+                    <i class="fas fa-hashtag"></i>
+                    <span class="popup-label">Tax Lot ID:</span>
+                    <span class="popup-value taxlot-id">N/A</span>
+                </div>
+                <div class="popup-row">
+                    <i class="fas fa-user"></i>
+                    <span class="popup-label">Owner:</span>
+                    <span class="popup-value owner-name">N/A</span>
+                </div>
+                <div class="popup-row">
+                    <i class="fas fa-expand"></i>
+                    <span class="popup-label">Acreage:</span>
+                    <span class="popup-value acreage">N/A</span>
+                </div>
+                <div class="popup-row">
+                    <i class="fas fa-map"></i>
+                    <span class="popup-label">Map/Taxlot:</span>
+                    <span class="popup-value map-taxlot">N/A</span>
+                </div>
+                <div class="popup-row">
+                    <i class="fas fa-city"></i>
+                    <span class="popup-label">City:</span>
+                    <span class="popup-value city">N/A</span>
+                </div>
+                <div class="popup-row">
+                    <i class="fas fa-mail-bulk"></i>
+                    <span class="popup-label">Zip Code:</span>
+                    <span class="popup-value zipcode">N/A</span>
+                </div>
+            </div>
+            <div class="popup-actions">
+                <button class="btn btn-save-property">
+                    <i class="fas fa-bookmark"></i>
+                    <span>Save Property</span>
+                </button>
+                <button class="btn btn-zoom-to">
+                    <i class="fas fa-search-plus"></i>
+                    <span>Zoom To</span>
+                </button>
+            </div>
+        </div>
+    </template>
+    
+    <!-- Saved Property Card Template (Hidden - Used by JavaScript) -->
+    <template id="property-card-template">
+        <div class="property-card" data-property-id="">
+            <div class="property-card-header">
+                <label class="checkbox-container">
+                    <input type="checkbox" class="property-checkbox">
+                    <span class="checkmark"></span>
+                </label>
+                <div class="property-card-title">
+                    <i class="fas fa-home"></i>
+                    <span class="card-address">N/A</span>
+                </div>
+                <button class="btn-remove-property" title="Remove Property">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="property-card-body">
+                <div class="card-row">
+                    <i class="fas fa-hashtag"></i>
+                    <span class="card-taxlot">N/A</span>
+                </div>
+                <div class="card-row">
+                    <i class="fas fa-expand"></i>
+                    <span class="card-acreage">N/A</span>
+                </div>
+                <div class="card-row">
+                    <i class="fas fa-user"></i>
+                    <span class="card-owner">N/A</span>
+                </div>
+            </div>
+            <div class="property-card-actions">
+                <button class="btn btn-sm btn-zoom-to-saved">
+                    <i class="fas fa-crosshairs"></i>
+                    <span>Locate</span>
+                </button>
+            </div>
+        </div>
+    </template>
+    
+    <!-- Search Result Item Template -->
+    <template id="search-result-template">
+        <li class="result-item" data-lat="" data-lng="">
+            <div class="result-icon">
+                <i class="fas fa-map-marker-alt"></i>
+            </div>
+            <div class="result-content">
+                <span class="result-title">Address</span>
+                <span class="result-subtitle">Tax Lot: N/A</span>
+            </div>
+            <button class="result-action" title="Go to location">
+                <i class="fas fa-chevron-right"></i>
+            </button>
+        </li>
+    </template>
+    
+    <!-- Confirmation Modal -->
+    <div id="confirm-modal" class="modal hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <i class="fas fa-exclamation-triangle"></i>
+                <h3>Confirm Action</h3>
+            </div>
+            <div class="modal-body">
+                <p id="confirm-message">Are you sure you want to proceed?</p>
+            </div>
+            <div class="modal-footer">
+                <button id="btn-confirm-cancel" class="btn btn-secondary">
+                    <i class="fas fa-times"></i>
+                    <span>Cancel</span>
+                </button>
+                <button id="btn-confirm-ok" class="btn btn-danger">
+                    <i class="fas fa-check"></i>
+                    <span>Confirm</span>
+                </button>
+            </div>
+        </div>
     </div>
-
-    <div class="header-right">
-      <button id="savedBtn" class="icon-button" aria-label="Open saved properties">
-        <svg class="icon"><use href="#ic-bookmark"></use></svg>
-        <span id="savedBadge" class="badge">0</span>
-      </button>
-    </div>
-  </header>
-
-  <!-- Basemap Toggle -->
-  <div class="view-toggle">
-    <button class="view-btn active" data-view="street">
-      <svg class="icon"><use href="#ic-map"></use></svg>
-      <span>Street</span>
-    </button>
-    <button class="view-btn" data-view="satellite">
-      <svg class="icon"><use href="#ic-map"></use></svg>
-      <span>Satellite</span>
-    </button>
-    <button class="view-btn" data-view="dark">
-      <svg class="icon"><use href="#ic-map"></use></svg>
-      <span>Dark</span>
-    </button>
-  </div>
-
-  <!-- GPS & Zoom Controls -->
-  <div class="map-controls">
-    <button id="gpsBtn" class="gps-button" aria-label="Locate me">
-      <svg class="icon"><use href="#ic-location"></use></svg>
-    </button>
-    <div id="gpsStatus" class="gps-status">Locating…</div>
-
-    <div class="zoom-controls">
-      <button id="zoomIn" class="zoom-btn" aria-label="Zoom in">
-        <svg class="icon"><use href="#ic-zoom-in"></use></svg>
-      </button>
-      <button id="zoomOut" class="zoom-btn" aria-label="Zoom out">
-        <svg class="icon"><use href="#ic-zoom-out"></use></svg>
-      </button>
-    </div>
-  </div>
-
-  <!-- Property Detail Panel (bottom sheet) -->
-  <section id="propertyPanel" class="property-panel">
-    <div class="panel-handle"></div>
-    <div class="panel-header">
-      <div class="panel-header-main">
-        <div>
-          <div id="propertyOwner" class="property-owner">Tap a parcel to view details</div>
-          <div id="propertyAddress" class="property-address"></div>
-        </div>
-        <div class="panel-header-actions">
-          <button
-            id="savePropertyIcon"
-            class="icon-button primary"
-            aria-label="Save this property"
-          >
-            <svg class="icon"><use href="#ic-bookmark"></use></svg>
-          </button>
-          <button
-            id="panelClose"
-            class="icon-button subtle"
-            aria-label="Close property panel"
-          >
-            <svg class="icon"><use href="#ic-close"></use></svg>
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <div class="panel-body">
-      <div class="property-stat-grid">
-        <div class="stat-card">
-          <div class="stat-label">Assessed Value</div>
-          <div id="statAssessed" class="stat-value">$0</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Lot Size</div>
-          <div id="statLotSize" class="stat-value">N/A</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Zoning</div>
-          <div id="statZoning" class="stat-value small">N/A</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Year Built</div>
-          <div id="statYearBuilt" class="stat-value">N/A</div>
-        </div>
-      </div>
-
-      <div class="detail-section">
-        <div class="detail-row">
-          <span class="detail-label">
-            <svg class="icon sm"><use href="#ic-map"></use></svg>
-            Parcel ID
-          </span>
-          <span id="detailParcelId" class="detail-value">N/A</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">
-            <svg class="icon sm"><use href="#ic-map"></use></svg>
-            Tax Lot
-          </span>
-          <span id="detailTaxLot" class="detail-value">N/A</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">
-            <svg class="icon sm"><use href="#ic-map"></use></svg>
-            Property Type
-          </span>
-          <span id="detailPropType" class="detail-value">N/A</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">
-            <svg class="icon sm"><use href="#ic-map"></use></svg>
-            Land Value
-          </span>
-          <span id="detailLandValue" class="detail-value">$0</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">
-            <svg class="icon sm"><use href="#ic-map"></use></svg>
-            Improvement Value
-          </span>
-          <span id="detailImprovementValue" class="detail-value">$0</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">
-            <svg class="icon sm"><use href="#ic-map"></use></svg>
-            Township / Range / Section
-          </span>
-          <span id="detailTRS" class="detail-value">N/A</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="panel-footer">
-      <button id="viewOnRLID" class="btn secondary">
-        <svg class="icon sm"><use href="#ic-external"></use></svg>
-        View in RLID
-      </button>
-      <button id="savePropertyButton" class="btn primary">
-        <svg class="icon sm"><use href="#ic-bookmark"></use></svg>
-        Save to List
-      </button>
-    </div>
-  </section>
-
-  <!-- Saved Properties Drawer -->
-  <aside id="savedDrawer" class="saved-drawer">
-    <header class="saved-header">
-      <div class="saved-header-left">
-        <button id="savedClose" class="icon-button subtle" aria-label="Close saved panel">
-          <svg class="icon"><use href="#ic-close"></use></svg>
-        </button>
-        <div>
-          <div class="saved-title">Saved Properties</div>
-          <div id="savedSubtitle" class="saved-subtitle">0 properties</div>
-        </div>
-      </div>
-    </header>
-
-    <div class="saved-toolbar">
-      <div class="saved-search-wrapper">
-        <span class="saved-search-icon">
-          <svg class="icon sm"><use href="#ic-search"></use></svg>
-        </span>
-        <input
-          id="savedSearchInput"
-          class="saved-search-input"
-          placeholder="Search by owner, address, or parcel ID"
-          autocomplete="off"
-        />
-        <button
-          id="savedSearchClear"
-          class="saved-search-clear"
-          aria-label="Clear saved search"
-        >
-          <svg class="icon sm"><use href="#ic-close"></use></svg>
-        </button>
-      </div>
-
-      <label class="saved-select-all">
-        <input id="selectAllCheckbox" type="checkbox" />
-        <span class="custom-checkbox-mark"></span>
-        <span>Select all</span>
-      </label>
-    </div>
-
-    <div id="savedList" class="saved-list"></div>
-
-    <footer class="saved-footer">
-      <div id="selectedSummary" class="selected-summary">No properties selected</div>
-      <div class="saved-footer-actions">
-        <button id="deleteSelected" class="btn subtle" disabled>
-          <svg class="icon sm"><use href="#ic-trash"></use></svg>
-          Delete
-        </button>
-        <button id="exportSelected" class="btn primary" disabled>
-          <svg class="icon sm"><use href="#ic-download"></use></svg>
-          Export TXT
-        </button>
-      </div>
-    </footer>
-  </aside>
-
-  <!-- Screen Overlay (for saved drawer & modal) -->
-  <div id="overlay" class="overlay"></div>
-
-  <!-- Confirmation Modal for deletions (custom popup) -->
-  <div id="confirmModal" class="modal-backdrop">
-    <div class="modal">
-      <div class="modal-header">
-        <div id="confirmTitle" class="modal-title">Confirm action</div>
-        <button id="confirmClose" class="icon-button subtle" aria-label="Close dialog">
-          <svg class="icon sm"><use href="#ic-close"></use></svg>
-        </button>
-      </div>
-      <div id="confirmMessage" class="modal-body">
-        Are you sure you want to perform this action?
-      </div>
-      <div class="modal-footer">
-        <button id="confirmCancel" class="btn subtle">Cancel</button>
-        <button id="confirmOk" class="btn primary">Confirm</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Toast Container -->
-  <div id="toastContainer" class="toast-container"></div>
-
-  <!-- Leaflet JS -->
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-  <!-- App Logic -->
-  <script type="module" src="script.js"></script>
+    
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" 
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" 
+            crossorigin="anonymous"></script>
+    
+    <!-- Custom Application Script -->
+    <script src="script.js"></script>
 </body>
 </html>

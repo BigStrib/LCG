@@ -1,39 +1,43 @@
 // script.js
 // Lane County GIS Pro - Front-end only (GitHub Pages safe)
-// Strong network handling with multiple fallbacks for taxlot and geocode APIs.
+// Uses your Cloudflare Worker as a CORS proxy + multiple ArcGIS endpoints
+// + geocoder fallbacks, with strong error handling and N/A fallbacks.
 
 // =======================================================
 // CONFIG
 // =======================================================
 
-// Optional CORS proxy if any endpoint doesn't set Access-Control-Allow-Origin:*.
-// Leave as empty string first; if you see CORS errors in DevTools, you can try a proxy.
-// WARNING: Public proxies are rate-limited and not production-grade.
-const CORS_PROXY = ''; // e.g. 'https://cors.isomorphic-git.org/'
+// 1) CORS PROXY (YOUR WORKER)
+// -------------------------------------------------------
+// This is your worker URL with "?url=" appended.
+// The target URL we want will be encoded and appended after that.
+//
+// Example final call:
+//   https://lane-cors.blakebigstrib.workers.dev/?url=https%3A%2F%2Fgis.lanecounty.org%2F...
+//
+const CORS_PROXY = 'https://lane-cors.blakebigstrib.workers.dev/?url=';
 
-// 1) Lane County taxlots (primary official source)
+// 2) Lane County taxlots (ArcGIS MapServer layer 0)
 const LANE_TAXLOTS_URL =
   'https://gis.lanecounty.org/arcgis/rest/services/LaneCounty/Taxlots/MapServer/0';
 
-// 2) City of Eugene taxlots (fallback)
-// TODO: plug in official Eugene taxlot URL if/when you have it.
-// Example placeholder:
+// 3) City of Eugene taxlots (optional fallback)
+// If you find the official Eugene taxlot URL, put it here (HTTPS).
 const EUGENE_TAXLOTS_URL =
-  ''; // 'https://maps.eugene-or.gov/arcgis/rest/services/Public/Taxlots/MapServer/0'
+  ''; // e.g. 'https://maps.eugene-or.gov/arcgis/rest/services/Public/Taxlots/MapServer/0'
 
-// 3) Oregon statewide taxlots (optional, fallback #2)
-// TODO: plug in official statewide parcel service if available.
+// 4) Statewide taxlots (optional fallback #2)
 const STATEWIDE_TAXLOTS_URL =
-  ''; // 'https://some.state.or.us/arcgis/rest/services/State/Taxlots/MapServer/0'
+  ''; // e.g. 'https://state.or.us/arcgis/rest/services/State/Taxlots/MapServer/0'
 
-// TAXLOT_ENDPOINTS: ordered list of parcel services to try
+// TAXLOT_ENDPOINTS is the ordered list of parcel services to try
 const TAXLOT_ENDPOINTS = [
   LANE_TAXLOTS_URL,
   EUGENE_TAXLOTS_URL,
   STATEWIDE_TAXLOTS_URL
-].filter(Boolean); // drop empties
+].filter(Boolean); // removes empty strings
 
-// 4) Geocoders
+// 5) Geocoders
 // Primary: Esri World Geocoder
 const ESRI_GEOCODE_URL =
   'https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer';
@@ -42,16 +46,16 @@ const ESRI_GEOCODE_URL =
 const OREGON_GEOCODE_URL =
   ''; // e.g. 'https://example.state.or.us/arcgis/rest/services/Geocoders/Statewide/GeocodeServer'
 
-// 5) Lane County approximate bounds (for map constraints & search bias)
+// 6) Lane County approximate bounds (for map constraints & search bias)
 const LANE_BOUNDS = L.latLngBounds(
   [43.4, -124.1], // SW
   [44.4, -122.5]  // NE
 );
 
-// 6) LocalStorage key
+// 7) LocalStorage key
 const STORAGE_KEY = 'lane_gis_saved_v1';
 
-// 7) Field mappings for different services (Lane, Eugene, State)
+// 8) Field mappings for different services (Lane, Eugene, State)
 const FIELD_MAP = {
   owner: [
     'OWNER1', 'OWNER', 'OWNER_NAME', 'NAME', 'GRANTEE',
@@ -126,7 +130,7 @@ function initMap() {
     attributionControl: false
   });
 
-  // Constrain map panning to Lane County
+  // Constrain map pannning to Lane County
   AppState.map.setMaxBounds(LANE_BOUNDS);
   AppState.map.on('drag', () => {
     AppState.map.panInsideBounds(LANE_BOUNDS, { animate: false });
@@ -173,7 +177,7 @@ function initUIEvents() {
     btn.addEventListener('click', () => switchBasemap(btn.dataset.view));
   });
 
-  // Zoom buttons
+  // Zoom
   document.getElementById('zoomIn').addEventListener('click', () => AppState.map.zoomIn());
   document.getElementById('zoomOut').addEventListener('click', () => AppState.map.zoomOut());
 
@@ -194,11 +198,13 @@ function initUIEvents() {
   // Saved search
   const savedSearchInput = document.getElementById('savedSearchInput');
   const savedSearchClear = document.getElementById('savedSearchClear');
+
   savedSearchInput.addEventListener('input', () => {
     const q = savedSearchInput.value.trim();
     savedSearchClear.classList.toggle('visible', q.length > 0);
     filterSaved(q);
   });
+
   savedSearchClear.addEventListener('click', () => {
     savedSearchInput.value = '';
     savedSearchClear.classList.remove('visible');
@@ -219,14 +225,20 @@ function initUIEvents() {
 }
 
 // =======================================================
-// FETCH WITH TIMEOUT
+// FETCH WITH TIMEOUT + PROXY
 // =======================================================
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
-    const res = await fetch(CORS_PROXY + url, { ...options, signal: controller.signal });
+    const fullUrl = CORS_PROXY
+      ? `${CORS_PROXY}${encodeURIComponent(url)}`
+      : url;
+
+    console.log('FETCH:', fullUrl);
+    const res = await fetch(fullUrl, { ...options, signal: controller.signal });
     clearTimeout(id);
     return res;
   } catch (err) {
@@ -310,11 +322,10 @@ function normalizeParcel(attrs) {
     section,
     trs,
     savedAt: null,
-    _rawAttrs: attrs  // keep for debugging if needed
+    _rawAttrs: attrs
   };
 }
 
-// Full N/A object if everything fails
 function buildNAProperty(lat, lng) {
   const coordLabel = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
   return {
@@ -344,7 +355,6 @@ function buildNAProperty(lat, lng) {
   };
 }
 
-// Property from reverse geocode
 function buildReverseGeocodeProperty(lat, lng, addressObj) {
   const addr = addressObj || {};
   const situs = addr.Address || addr.Match_addr || 'Address not available';
@@ -396,7 +406,7 @@ async function identifyParcelAt(lat, lng) {
   let geometry = null;
   let usedFallback = false;
 
-  // 1) Try primary / backup taxlot services
+  // 1) Parcel services
   try {
     const result = await tryIdentifyFromTaxlots(lat, lng);
     if (result) {
@@ -407,7 +417,7 @@ async function identifyParcelAt(lat, lng) {
     console.warn('Taxlot identify failed:', err.message || err);
   }
 
-  // 2) If no parcel, try reverse geocoding to at least show address
+  // 2) Reverse geocode
   if (!prop) {
     try {
       const rev = await tryReverseGeocode(lat, lng);
@@ -420,13 +430,13 @@ async function identifyParcelAt(lat, lng) {
     }
   }
 
-  // 3) If still nothing, build a full N/A property with coordinates
+  // 3) Full N/A fallback
   if (!prop) {
     prop = buildNAProperty(lat, lng);
     usedFallback = true;
   }
 
-  // Highlight geometry if we got any
+  // Highlight geometry if available
   if (geometry && geometry.rings) {
     const coords = geometry.rings[0].map(([x, y]) => [y, x]);
     L.polygon(coords, {
@@ -448,11 +458,9 @@ async function identifyParcelAt(lat, lng) {
     showToast('Property loaded', 'success');
   }
 
-  // Debug: log raw attributes to console for inspection
   console.log('Raw parcel attributes:', prop._rawAttrs || {});
 }
 
-// Try multiple taxlot endpoints in sequence
 async function tryIdentifyFromTaxlots(lat, lng) {
   const params = new URLSearchParams({
     f: 'json',
@@ -469,6 +477,7 @@ async function tryIdentifyFromTaxlots(lat, lng) {
   for (const endpoint of TAXLOT_ENDPOINTS) {
     const url = `${endpoint}/query?${params.toString()}`;
     try {
+      console.log('Querying taxlots endpoint:', url);
       const res = await fetchWithTimeout(url, {}, 8000);
       if (!res.ok) {
         errors.push(`${endpoint}: HTTP ${res.status}`);
@@ -497,7 +506,6 @@ async function tryIdentifyFromTaxlots(lat, lng) {
   return null;
 }
 
-// Reverse geocode as backup (Esri then Oregon)
 async function tryReverseGeocode(lat, lng) {
   const baseParams = new URLSearchParams({
     f: 'json',
@@ -507,7 +515,7 @@ async function tryReverseGeocode(lat, lng) {
 
   const errors = [];
 
-  // 1) Esri primary
+  // Esri primary
   try {
     const urlEsri = `${ESRI_GEOCODE_URL}/reverseGeocode?${baseParams.toString()}`;
     const resEsri = await fetchWithTimeout(urlEsri, {}, 7000);
@@ -524,7 +532,7 @@ async function tryReverseGeocode(lat, lng) {
     errors.push(`Esri reverse: ${err.name === 'AbortError' ? 'timeout' : err.message}`);
   }
 
-  // 2) Oregon fallback
+  // Oregon fallback
   if (OREGON_GEOCODE_URL) {
     try {
       const urlOr = `${OREGON_GEOCODE_URL}/reverseGeocode?${baseParams.toString()}`;
@@ -548,7 +556,7 @@ async function tryReverseGeocode(lat, lng) {
 }
 
 // =======================================================
-// PROPERTY PANEL (uses body.map-focus to hide map chrome)
+// PROPERTY PANEL
 // =======================================================
 
 function updatePropertyPanel(p) {
@@ -731,7 +739,7 @@ async function searchAddresses(query) {
 
   const errors = [];
 
-  // 1) Esri primary
+  // Esri primary
   try {
     const urlEsri = `${ESRI_GEOCODE_URL}/findAddressCandidates?${params.toString()}`;
     const resEsri = await fetchWithTimeout(urlEsri, {}, 8000);
@@ -747,7 +755,7 @@ async function searchAddresses(query) {
     errors.push(`Esri geocoder: ${err.name === 'AbortError' ? 'timeout' : err.message}`);
   }
 
-  // 2) Oregon fallback
+  // Oregon fallback (optional)
   if (OREGON_GEOCODE_URL) {
     try {
       const urlOr = `${OREGON_GEOCODE_URL}/findAddressCandidates?${params.toString()}`;
@@ -902,7 +910,7 @@ function closeSavedDrawer() {
   document.getElementById('overlay').classList.remove('visible');
 }
 
-// Filter saved by query
+// Filter saved
 function filterSaved(query) {
   const q = query.toLowerCase();
   if (!q) {
@@ -1221,7 +1229,7 @@ function openRLID() {
 }
 
 // =======================================================
-// CONFIRM MODAL
+// CONFIRM MODAL + UTILITIES
 // =======================================================
 
 let confirmResolve = null;
@@ -1256,7 +1264,7 @@ function showConfirmModal({ title, message, confirmText = 'OK', confirmStyle = '
 
   btnOk.textContent = confirmText;
   btnOk.classList.remove('primary', 'danger');
-  btnOk.classList.add('primary'); // one main style
+  btnOk.classList.add('primary');
 
   modal.classList.add('visible');
 
@@ -1264,10 +1272,6 @@ function showConfirmModal({ title, message, confirmText = 'OK', confirmStyle = '
     confirmResolve = resolve;
   });
 }
-
-// =======================================================
-// UTILITIES
-// =======================================================
 
 function formatCurrency(v) {
   const n = Number(v);

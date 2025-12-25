@@ -1,5 +1,5 @@
 /* =========================================================
-   GLOBAL TOKENS!
+   GLOBAL TOKENS
    ========================================================= */
 
 :root {
@@ -1320,5 +1320,4 @@ body.map-focus .map-controls {
   .saved-card-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-
 }

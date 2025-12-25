@@ -1,79 +1,63 @@
 // script.js
-// Lane County GIS Pro - Front-end only (GitHub Pages safe)
-// Uses AllOrigins as a CORS proxy + Lane County ArcGIS taxlots,
-// with strong error handling, fallbacks, and professional UI wiring.
+// Lane County GIS Pro - front-end only (GitHub Pages safe)
+// Uses AllOrigins CORS proxy + Lane County ArcGIS taxlots with fallbacks.
 
 // =======================================================
 // CONFIG
 // =======================================================
 
-// 1) CORS PROXY (AllOrigins)
-// Docs: https://api.allorigins.win
-// This endpoint returns the target URL contents with CORS headers.
+// AllOrigins proxy: https://api.allorigins.win
+// Usage: https://api.allorigins.win/raw?url=<encodedTargetUrl>
 const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
 
-// 2) Lane County taxlots (ArcGIS MapServer layer 0)
+// Lane County taxlots - primary
 const LANE_TAXLOTS_URL =
   'https://gis.lanecounty.org/arcgis/rest/services/LaneCounty/Taxlots/MapServer/0';
 
-// 3) City of Eugene taxlots (optional fallback)
-const EUGENE_TAXLOTS_URL =
-  ''; // e.g. 'https://maps.eugene-or.gov/arcgis/rest/services/Public/Taxlots/MapServer/0'
+// Optional fallbacks (keep empty until you have real URLs)
+const EUGENE_TAXLOTS_URL = '';
+const STATEWIDE_TAXLOTS_URL = '';
 
-// 4) Statewide taxlots (optional fallback #2)
-const STATEWIDE_TAXLOTS_URL =
-  ''; // e.g. 'https://state.or.us/arcgis/rest/services/State/Taxlots/MapServer/0'
-
-// TAXLOT_ENDPOINTS is the ordered list of parcel services to try
+// Endpoints to try in order
 const TAXLOT_ENDPOINTS = [
   LANE_TAXLOTS_URL,
   EUGENE_TAXLOTS_URL,
   STATEWIDE_TAXLOTS_URL
 ].filter(Boolean);
 
-// 5) Geocoders
-// Primary: Esri World Geocoder
+// Geocoders
 const ESRI_GEOCODE_URL =
   'https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer';
+const OREGON_GEOCODE_URL = ''; // optional Oregon locator
 
-// Fallback: Oregon GEOHub / Statewide geocoder (optional)
-const OREGON_GEOCODE_URL =
-  ''; // e.g. 'https://example.state.or.us/arcgis/rest/services/Geocoders/Statewide/GeocodeServer'
-
-// 6) Lane County approximate bounds (for map constraints & search bias)
+// Lane County bounds
 const LANE_BOUNDS = L.latLngBounds(
-  [43.4, -124.1], // SW
-  [44.4, -122.5]  // NE
+  [43.4, -124.1],
+  [44.4, -122.5]
 );
 
-// 7) LocalStorage key
+// LocalStorage key
 const STORAGE_KEY = 'lane_gis_saved_v1';
 
-// 8) Field mappings for different services (Lane, Eugene, State)
+// Field mappings
 const FIELD_MAP = {
-  owner: [
-    'OWNER1', 'OWNER', 'OWNER_NAME', 'NAME', 'GRANTEE',
-    'OWNNAME', 'ownname'
-  ],
-  situs: [
-    'SITUS_ADDR', 'SITEADDR', 'SITUS', 'ADDRESS', 'PROP_ADDR',
-    'ADDR1', 'addr1'
-  ],
-  city:       ['SITUS_CITY', 'CITY'],
-  state:      ['SITUS_STATE', 'STATE'],
-  zip:        ['SITUS_ZIP', 'ZIP', 'ZIPCODE'],
-  assessed:   ['TOTALVALUE', 'TOTAL_VALUE', 'ASSESSED', 'ASSESSED_VALUE'],
-  land:       ['LANDVALUE', 'LAND_VALUE'],
-  improv:     ['IMPVALUE', 'IMP_VALUE', 'IMPR_VALUE'],
-  acres:      ['ACRES', 'ACREAGE'],
-  zoning:     ['ZONING', 'ZONE'],
-  yearBuilt:  ['YEARBUILT', 'YEAR_BUILT'],
-  parcelId:   ['TAXLOT', 'PARCEL', 'PARCEL_ID', 'ACCTNO', 'acctno', 'MAPLOT', 'maplot'],
-  taxLot:     ['MAPTAXLOT', 'MAP_TAXLOT', 'TAXLOT', 'MAPLOT', 'maplot'],
-  propType:   ['PROPCLASS', 'PROP_CLASS', 'PROPERTY_CLASS'],
-  township:   ['TOWNSHIP', 'TWP'],
-  range:      ['RANGE', 'RNG'],
-  section:    ['SECTION', 'SEC']
+  owner: ['OWNER1', 'OWNER', 'OWNER_NAME', 'NAME', 'GRANTEE', 'OWNNAME', 'ownname'],
+  situs: ['SITUS_ADDR', 'SITEADDR', 'SITUS', 'ADDRESS', 'PROP_ADDR', 'ADDR1', 'addr1'],
+  city: ['SITUS_CITY', 'CITY'],
+  state: ['SITUS_STATE', 'STATE'],
+  zip: ['SITUS_ZIP', 'ZIP', 'ZIPCODE'],
+  assessed: ['TOTALVALUE', 'TOTAL_VALUE', 'ASSESSED', 'ASSESSED_VALUE'],
+  land: ['LANDVALUE', 'LAND_VALUE'],
+  improv: ['IMPVALUE', 'IMP_VALUE', 'IMPR_VALUE'],
+  acres: ['ACRES', 'ACREAGE'],
+  zoning: ['ZONING', 'ZONE'],
+  yearBuilt: ['YEARBUILT', 'YEAR_BUILT'],
+  parcelId: ['TAXLOT', 'PARCEL', 'PARCEL_ID', 'ACCTNO', 'acctno', 'MAPLOT', 'maplot'],
+  taxLot: ['MAPTAXLOT', 'MAP_TAXLOT', 'TAXLOT', 'MAPLOT', 'maplot'],
+  propType: ['PROPCLASS', 'PROP_CLASS', 'PROPERTY_CLASS'],
+  township: ['TOWNSHIP', 'TWP'],
+  range: ['RANGE', 'RNG'],
+  section: ['SECTION', 'SEC']
 };
 
 // =======================================================
@@ -88,139 +72,40 @@ const AppState = {
   userMarker: null,
   isLocating: false,
 
-  currentProperty: null,     // normalized property object
+  currentProperty: null,
   saved: [],
   filteredSaved: [],
   selectedSavedIds: new Set()
 };
 
 // =======================================================
-// INIT
+// UTILITIES
 // =======================================================
 
-document.addEventListener('DOMContentLoaded', () => {
-  try {
-    initMap();
-    initBaseLayers();
-    initUIEvents();
-    initSaved();
-    initGlobalSearch();
-  } catch (err) {
-    console.error('Initialization error:', err);
-    showToast('Error initializing app. Check console.', 'error');
-  } finally {
-    setTimeout(() => {
-      document.getElementById('loadingOverlay').classList.add('hidden');
-    }, 900);
-  }
-});
-
-// =======================================================
-// MAP
-// =======================================================
-
-function initMap() {
-  AppState.map = L.map('map', {
-    center: [44.05, -123.09],
-    zoom: 11,
-    minZoom: 9,
-    maxZoom: 20,
-    zoomControl: false,
-    attributionControl: false
-  });
-
-  AppState.map.setMaxBounds(LANE_BOUNDS);
-  AppState.map.on('drag', () => {
-    AppState.map.panInsideBounds(LANE_BOUNDS, { animate: false });
-  });
-
-  AppState.highlightLayer = L.layerGroup().addTo(AppState.map);
-
-  AppState.map.on('click', (e) => {
-    if (AppState.map.getZoom() < 14) {
-      showToast('Zoom in closer to identify parcels', 'error');
-      return;
-    }
-    identifyParcelAt(e.latlng.lat, e.latlng.lng);
-  });
+function formatCurrency(v) {
+  const n = Number(v);
+  if (Number.isNaN(n)) return 'N/A';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0
+  }).format(n);
 }
 
-function initBaseLayers() {
-  const street = L.tileLayer(
-    'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    { maxZoom: 20 }
-  ).addTo(AppState.map);
-
-  const satellite = L.tileLayer(
-    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    { maxZoom: 20 }
-  );
-
-  const dark = L.tileLayer(
-    'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    { maxZoom: 20 }
-  );
-
-  AppState.baseLayers = { street, satellite, dark };
+function showToast(message, type = 'success') {
+  const container = document.getElementById('toastContainer');
+  const div = document.createElement('div');
+  div.className = `toast ${type}`;
+  div.innerHTML = `
+    <span class="toast-icon"></span>
+    <span>${message}</span>
+  `;
+  container.appendChild(div);
+  setTimeout(() => div.remove(), 2600);
 }
 
 // =======================================================
-// UI EVENTS
-// =======================================================
-
-function initUIEvents() {
-  // Basemap toggle
-  document.querySelectorAll('.view-btn').forEach(btn => {
-    btn.addEventListener('click', () => switchBasemap(btn.dataset.view));
-  });
-
-  // Zoom
-  document.getElementById('zoomIn').addEventListener('click', () => AppState.map.zoomIn());
-  document.getElementById('zoomOut').addEventListener('click', () => AppState.map.zoomOut());
-
-  // GPS
-  document.getElementById('gpsBtn').addEventListener('click', toggleLocate);
-
-  // Property panel
-  document.getElementById('panelClose').addEventListener('click', closePropertyPanel);
-  document.getElementById('savePropertyIcon').addEventListener('click', saveCurrentProperty);
-  document.getElementById('savePropertyButton').addEventListener('click', saveCurrentProperty);
-  document.getElementById('viewOnRLID').addEventListener('click', openRLID);
-
-  // Saved drawer
-  document.getElementById('savedBtn').addEventListener('click', openSavedDrawer);
-  document.getElementById('savedClose').addEventListener('click', closeSavedDrawer);
-  document.getElementById('overlay').addEventListener('click', closeSavedDrawer);
-
-  // Saved search
-  const savedSearchInput = document.getElementById('savedSearchInput');
-  const savedSearchClear = document.getElementById('savedSearchClear');
-  savedSearchInput.addEventListener('input', () => {
-    const q = savedSearchInput.value.trim();
-    savedSearchClear.classList.toggle('visible', q.length > 0);
-    filterSaved(q);
-  });
-  savedSearchClear.addEventListener('click', () => {
-    savedSearchInput.value = '';
-    savedSearchClear.classList.remove('visible');
-    filterSaved('');
-  });
-
-  // Select all
-  document.getElementById('selectAllCheckbox').addEventListener('change', (e) => {
-    handleSelectAll(e.target.checked);
-  });
-
-  // Delete/export
-  document.getElementById('deleteSelected').addEventListener('click', deleteSelectedSaved);
-  document.getElementById('exportSelected').addEventListener('click', exportSelectedSaved);
-
-  // Confirm modal
-  initConfirmModal();
-}
-
-// =======================================================
-// FETCH WITH TIMEOUT + AllOrigins PROXY
+// NETWORK (FETCH+PROXY WITH TIMEOUT)
 // =======================================================
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
@@ -231,7 +116,6 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
     const proxiedUrl = CORS_PROXY
       ? `${CORS_PROXY}${encodeURIComponent(url)}`
       : url;
-
     console.log('FETCH:', proxiedUrl);
     const res = await fetch(proxiedUrl, { ...options, signal: controller.signal });
     clearTimeout(id);
@@ -391,8 +275,100 @@ function buildReverseGeocodeProperty(lat, lng, addressObj) {
 }
 
 // =======================================================
-// IDENTIFY PARCEL + FALLBACKS
+// PARCEL IDENTIFY + FALLBACKS
 // =======================================================
+
+async function tryIdentifyFromTaxlots(lat, lng) {
+  const params = new URLSearchParams({
+    f: 'json',
+    geometry: `${lng},${lat}`,
+    geometryType: 'esriGeometryPoint',
+    inSR: '4326',
+    spatialRel: 'esriSpatialRelIntersects',
+    outFields: '*',
+    returnGeometry: 'true'
+  });
+
+  const errors = [];
+
+  for (const endpoint of TAXLOT_ENDPOINTS) {
+    const url = `${endpoint}/query?${params.toString()}`;
+    try {
+      console.log('Querying taxlots endpoint:', url);
+      const res = await fetchWithTimeout(url, {}, 10000);
+      if (!res.ok) {
+        errors.push(`${endpoint}: HTTP ${res.status}`);
+        continue;
+      }
+
+      const json = await res.json();
+      if (json.features && json.features.length) {
+        const feat = json.features[0];
+        const attrs = feat.attributes || feat.properties || {};
+        const geom = feat.geometry || null;
+        const prop = normalizeParcel(attrs);
+        return { property: prop, geometry: geom };
+      } else {
+        errors.push(`${endpoint}: no features at this location`);
+      }
+    } catch (err) {
+      const reason = err.name === 'AbortError' ? 'timeout' : (err.message || 'network error');
+      errors.push(`${endpoint}: ${reason}`);
+    }
+  }
+
+  if (errors.length) {
+    console.warn('All taxlot endpoints failed:', errors.join(' | '));
+  }
+  return null;
+}
+
+async function tryReverseGeocode(lat, lng) {
+  const baseParams = new URLSearchParams({
+    f: 'json',
+    location: `${lng},${lat}`,
+    outFields: '*'
+  });
+
+  const errors = [];
+
+  try {
+    const urlEsri = `${ESRI_GEOCODE_URL}/reverseGeocode?${baseParams.toString()}`;
+    const resEsri = await fetchWithTimeout(urlEsri, {}, 7000);
+    if (resEsri.ok) {
+      const data = await resEsri.json();
+      if (data.address) {
+        return buildReverseGeocodeProperty(lat, lng, data.address);
+      }
+      errors.push('Esri reverse: no address in response');
+    } else {
+      errors.push(`Esri reverse: HTTP ${resEsri.status}`);
+    }
+  } catch (err) {
+    errors.push(`Esri reverse: ${err.name === 'AbortError' ? 'timeout' : err.message}`);
+  }
+
+  if (OREGON_GEOCODE_URL) {
+    try {
+      const urlOr = `${OREGON_GEOCODE_URL}/reverseGeocode?${baseParams.toString()}`;
+      const resOr = await fetchWithTimeout(urlOr, {}, 7000);
+      if (resOr.ok) {
+        const data = await resOr.json();
+        if (data.address) {
+          return buildReverseGeocodeProperty(lat, lng, data.address);
+        }
+        errors.push('Oregon reverse: no address in response');
+      } else {
+        errors.push(`Oregon reverse: HTTP ${resOr.status}`);
+      }
+    } catch (err) {
+      errors.push(`Oregon reverse: ${err.name === 'AbortError' ? 'timeout' : err.message}`);
+    }
+  }
+
+  console.warn('All reverse geocoders failed or returned nothing:', errors.join(' | '));
+  return null;
+}
 
 async function identifyParcelAt(lat, lng) {
   AppState.highlightLayer.clearLayers();
@@ -450,100 +426,6 @@ async function identifyParcelAt(lat, lng) {
   }
 
   console.log('Raw parcel attributes:', prop._rawAttrs || {});
-}
-
-async function tryIdentifyFromTaxlots(lat, lng) {
-  const params = new URLSearchParams({
-    f: 'json',
-    geometry: `${lng},${lat}`,
-    geometryType: 'esriGeometryPoint',
-    inSR: '4326',
-    spatialRel: 'esriSpatialRelIntersects',
-    outFields: '*',
-    returnGeometry: 'true'
-  });
-
-  const errors = [];
-
-  for (const endpoint of TAXLOT_ENDPOINTS) {
-    const url = `${endpoint}/query?${params.toString()}`;
-    try {
-      console.log('Querying taxlots endpoint:', url);
-      const res = await fetchWithTimeout(url, {}, 10000);
-      if (!res.ok) {
-        errors.push(`${endpoint}: HTTP ${res.status}`);
-        continue;
-      }
-
-      const json = await res.json();
-      if (json.features && json.features.length) {
-        const feat = json.features[0];
-        const attrs = feat.attributes || feat.properties || {};
-        const geom = feat.geometry || null;
-        const prop = normalizeParcel(attrs);
-        return { property: prop, geometry: geom };
-      } else {
-        errors.push(`${endpoint}: no features at this location`);
-      }
-    } catch (err) {
-      const reason = err.name === 'AbortError' ? 'timeout' : (err.message || 'network error');
-      errors.push(`${endpoint}: ${reason}`);
-    }
-  }
-
-  if (errors.length) {
-    console.warn('All taxlot endpoints failed:', errors.join(' | '));
-  }
-  return null;
-}
-
-async function tryReverseGeocode(lat, lng) {
-  const baseParams = new URLSearchParams({
-    f: 'json',
-    location: `${lng},${lat}`,
-    outFields: '*'
-  });
-
-  const errors = [];
-
-  // Esri primary
-  try {
-    const urlEsri = `${ESRI_GEOCODE_URL}/reverseGeocode?${baseParams.toString()}`;
-    const resEsri = await fetchWithTimeout(urlEsri, {}, 7000);
-    if (resEsri.ok) {
-      const data = await resEsri.json();
-      if (data.address) {
-        return buildReverseGeocodeProperty(lat, lng, data.address);
-      }
-      errors.push('Esri reverse: no address in response');
-    } else {
-      errors.push(`Esri reverse: HTTP ${resEsri.status}`);
-    }
-  } catch (err) {
-    errors.push(`Esri reverse: ${err.name === 'AbortError' ? 'timeout' : err.message}`);
-  }
-
-  // Oregon fallback (optional)
-  if (OREGON_GEOCODE_URL) {
-    try {
-      const urlOr = `${OREGON_GEOCODE_URL}/reverseGeocode?${baseParams.toString()}`;
-      const resOr = await fetchWithTimeout(urlOr, {}, 7000);
-      if (resOr.ok) {
-        const data = await resOr.json();
-        if (data.address) {
-          return buildReverseGeocodeProperty(lat, lng, data.address);
-        }
-        errors.push('Oregon reverse: no address in response');
-      } else {
-        errors.push(`Oregon reverse: HTTP ${resOr.status}`);
-      }
-    } catch (err) {
-      errors.push(`Oregon reverse: ${err.name === 'AbortError' ? 'timeout' : err.message}`);
-    }
-  }
-
-  console.warn('All reverse geocoders failed or returned nothing:', errors.join(' | '));
-  return null;
 }
 
 // =======================================================
@@ -662,157 +544,6 @@ function toggleLocate() {
     },
     { enableHighAccuracy: true, timeout: 10000 }
   );
-}
-
-// =======================================================
-// GLOBAL SEARCH
-// =======================================================
-
-function initGlobalSearch() {
-  const input = document.getElementById('globalSearchInput');
-  const clearBtn = document.getElementById('globalSearchClear');
-  const resultsEl = document.getElementById('globalSearchResults');
-  let debounce;
-
-  input.addEventListener('input', () => {
-    const q = input.value.trim();
-    clearBtn.classList.toggle('visible', q.length > 0);
-
-    clearTimeout(debounce);
-    if (q.length < 3) {
-      resultsEl.innerHTML = '';
-      resultsEl.classList.remove('visible');
-      return;
-    }
-
-    debounce = setTimeout(async () => {
-      try {
-        const candidates = await searchAddresses(q);
-        renderSearchResults(candidates);
-      } catch (err) {
-        console.error(err);
-        showToast('Network error while searching', 'error');
-      }
-    }, 300);
-  });
-
-  clearBtn.addEventListener('click', () => {
-    input.value = '';
-    clearBtn.classList.remove('visible');
-    resultsEl.innerHTML = '';
-    resultsEl.classList.remove('visible');
-  });
-
-  document.addEventListener('click', (e) => {
-    if (!e.target.closest('.search-wrapper')) {
-      resultsEl.classList.remove('visible');
-    }
-  });
-}
-
-async function searchAddresses(query) {
-  const bbox = `${LANE_BOUNDS.getWest()},${LANE_BOUNDS.getSouth()},${LANE_BOUNDS.getEast()},${LANE_BOUNDS.getNorth()}`;
-  const params = new URLSearchParams({
-    f: 'json',
-    SingleLine: query,
-    maxLocations: '8',
-    outFields: '*',
-    category: 'Address',
-    searchExtent: bbox
-  });
-
-  const normalizeCandidates = (json) =>
-    (json.candidates || []).map(c => ({
-      address: c.address,
-      score: c.score,
-      location: { lat: c.location.y, lng: c.location.x }
-    }));
-
-  const errors = [];
-
-  // Esri primary
-  try {
-    const urlEsri = `${ESRI_GEOCODE_URL}/findAddressCandidates?${params.toString()}`;
-    const resEsri = await fetchWithTimeout(urlEsri, {}, 8000);
-    if (resEsri.ok) {
-      const json = await resEsri.json();
-      const cands = normalizeCandidates(json);
-      if (cands.length) return cands;
-      errors.push('Esri geocoder: no candidates');
-    } else {
-      errors.push(`Esri geocoder: HTTP ${resEsri.status}`);
-    }
-  } catch (err) {
-    errors.push(`Esri geocoder: ${err.name === 'AbortError' ? 'timeout' : err.message}`);
-  }
-
-  // Oregon fallback (optional)
-  if (OREGON_GEOCODE_URL) {
-    try {
-      const urlOr = `${OREGON_GEOCODE_URL}/findAddressCandidates?${params.toString()}`;
-      const resOr = await fetchWithTimeout(urlOr, {}, 8000);
-      if (resOr.ok) {
-        const json = await resOr.json();
-        const cands = normalizeCandidates(json);
-        if (cands.length) return cands;
-        errors.push('Oregon geocoder: no candidates');
-      } else {
-        errors.push(`Oregon geocoder: HTTP ${resOr.status}`);
-      }
-    } catch (err) {
-      errors.push(`Oregon geocoder: ${err.name === 'AbortError' ? 'timeout' : err.message}`);
-    }
-  }
-
-  console.warn('All geocoders failed or returned no candidates:', errors.join(' | '));
-  return [];
-}
-
-function renderSearchResults(candidates) {
-  const resultsEl = document.getElementById('globalSearchResults');
-  resultsEl.innerHTML = '';
-
-  if (!candidates.length) {
-    resultsEl.innerHTML = `
-      <div class="search-result-item">
-        <div class="search-result-icon">
-          <svg class="icon"><use href="#ic-search"></use></svg>
-        </div>
-        <div class="search-result-text">
-          <div class="search-result-title">No results found</div>
-          <div class="search-result-subtitle">Try another Lane County address</div>
-        </div>
-      </div>`;
-    resultsEl.classList.add('visible');
-    return;
-  }
-
-  candidates.forEach(c => {
-    const div = document.createElement('div');
-    div.className = 'search-result-item';
-    div.innerHTML = `
-      <div class="search-result-icon">
-        <svg class="icon"><use href="#ic-location"></use></svg>
-      </div>
-      <div class="search-result-text">
-        <div class="search-result-title">${c.address}</div>
-        <div class="search-result-subtitle">Score: ${Math.round(c.score)}%</div>
-      </div>`;
-    div.addEventListener('click', () => {
-      resultsEl.classList.remove('visible');
-      document.getElementById('globalSearchInput').value = c.address;
-      flyToAndIdentify(c.location.lat, c.location.lng);
-    });
-    resultsEl.appendChild(div);
-  });
-
-  resultsEl.classList.add('visible');
-}
-
-function flyToAndIdentify(lat, lng) {
-  const center = L.latLng(lat, lng);
-  AppState.map.flyTo(center, 18, { duration: 1.5 });
-  setTimeout(() => identifyParcelAt(lat, lng), 1500);
 }
 
 // =======================================================
@@ -984,13 +715,11 @@ function renderSavedList() {
       </div>
     `;
 
-    // Selection checkbox
     card.querySelector('.card-checkbox').addEventListener('click', (e) => {
       e.stopPropagation();
       toggleSavedSelection(p.id);
     });
 
-    // Zoom to property
     card.querySelectorAll('.saved-mini-btn')[0].addEventListener('click', async (e) => {
       e.stopPropagation();
       closeSavedDrawer();
@@ -1009,7 +738,6 @@ function renderSavedList() {
           showToast('Could not locate this address on the map', 'error');
           return;
         }
-
         const best = candidates[0];
         flyToAndIdentify(best.location.lat, best.location.lng);
       } catch (err) {
@@ -1018,7 +746,6 @@ function renderSavedList() {
       }
     });
 
-    // Delete single
     card.querySelectorAll('.saved-mini-btn')[1].addEventListener('click', async (e) => {
       e.stopPropagation();
       const confirmed = await showConfirmModal({
@@ -1215,7 +942,7 @@ function openRLID() {
 }
 
 // =======================================================
-// CONFIRM MODAL + UTILITIES
+// CONFIRM MODAL
 // =======================================================
 
 let confirmResolve = null;
@@ -1259,24 +986,6 @@ function showConfirmModal({ title, message, confirmText = 'OK', confirmStyle = '
   });
 }
 
-function formatCurrency(v) {
-  const n = Number(v);
-  if (Number.isNaN(n)) return 'N/A';
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0
-  }).format(n);
-}
-
-function showToast(message, type = 'success') {
-  const container = document.getElementById('toastContainer');
-  const div = document.createElement('div');
-  div.className = `toast ${type}`;
-  div.innerHTML = `
-    <span class="toast-icon"></span>
-    <span>${message}</span>
-  `;
-  container.appendChild(div);
-  setTimeout(() => div.remove(), 2600);
-}
+// =======================================================
+// DOMContentLoaded handler at top already calls init()
+// =======================================================
